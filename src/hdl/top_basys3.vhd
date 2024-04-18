@@ -96,8 +96,6 @@ architecture top_basys3_arch of top_basys3 is
         generic ( constant k_WIDTH : natural  := 4); 
         Port ( i_clk		: in  STD_LOGIC;
                i_reset      : in  STD_LOGIC; -- asynchronous
-               i_D3         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
-               i_D2         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
                i_D1         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
                i_D0         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
                o_data        : out STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
@@ -116,20 +114,29 @@ architecture top_basys3_arch of top_basys3 is
                 i_Reset   : in  STD_LOGIC;
                 i_stop    : in  STD_LOGIC;
                 i_up_down : in  STD_LOGIC;
-                o_floor   : out STD_LOGIC_VECTOR (3 downto 0)           
+                o_floor0   : out STD_LOGIC_VECTOR (3 downto 0);
+                o_floor1   : out STD_LOGIC_VECTOR (3 downto 0)           
               );
         end component elevator_controller_fsm;
         
     component clock_divider is
         generic ( constant k_DIV : natural := 2	);
-        port (     i_clk    : in std_logic;
+        port (  i_clk    : in std_logic;
                 i_reset  : in std_logic;           -- asynchronous
                 o_clk    : out std_logic           -- divided (slow) clock
         );
         end component clock_divider;
         
-        signal w_clk : std_logic;
-        signal w_D : std_logic_vector(3 downto 0) := (others => '0');
+    component clock_divider2 is
+        generic ( constant k_DIV : natural := 2    );
+        port (  i_clk    : in std_logic;
+                i_reset  : in std_logic;           -- asynchronous
+                o_clk    : out std_logic           -- divided (slow) clock
+        );
+        end component clock_divider2;
+                
+        signal w_clk, w_clk2 : std_logic;
+        signal w_D0, w_D1, w_D2, w_sel : std_logic_vector(3 downto 0) := (others => '0');
     
 begin
 	-- PORT MAPS ----------------------------------------
@@ -138,23 +145,32 @@ begin
             i_stop => sw(0),
             i_up_down => sw(1),
             i_Reset => btnR or btnU,           
-            i_clk => w_clk,
-            o_floor => w_D
+            i_clk => w_clk2,
+            o_floor0 => w_D0,
+            o_floor1 => w_D1
         );
         
     clkdiv_inst : clock_divider
-            generic map ( k_DIV => 25000000 ) -- 1 Hz clock from 100 MHz
+            generic map ( k_DIV => 100000 ) -- 1 Hz clock from 100 MHz
                        port map (                          
                            i_clk   => clk,
                            i_reset => btnL or btnU,
                            o_clk   => w_clk
                        ); 
+   clkdiv2_inst : clock_divider
+           generic map ( k_DIV => 25000000 ) -- 1 Hz clock from 100 MHz
+                      port map (                          
+                          i_clk   => clk,
+                          i_reset => btnL or btnU,
+                          o_clk   => w_clk2
+                      ); 
+ 
     sevenSegDecoder_inst : sevenSegDecoder
         port map(
-            i_D(0) => w_D(0),
-            i_D(1) => w_D(1),
-            i_D(2) => w_D(2),
-            i_D(3) => w_D(3),
+            i_D(0) => w_D2(0),
+            i_D(1) => w_D2(1),
+            i_D(2) => w_D2(2),
+            i_D(3) => w_D2(3),
             o_S(0) => seg(0),
             o_S(1) => seg(1),
             o_S(2) => seg(2),
@@ -163,6 +179,15 @@ begin
             o_S(5) => seg(5),
             o_S(6) => seg(6)
 
+        );
+    TDM4_inst : TDM4
+        port map(
+            i_clk => w_clk,
+            i_reset => btnU,
+            i_D0 => w_D0,
+            i_D1 => w_D1,
+            o_data => w_D2,
+            o_sel => w_sel
         );
 	
 	
@@ -177,9 +202,9 @@ begin
 	-- wire up active-low 7SD anodes (an) as required
     -- Tie any unused anodes to power ('1') to keep them off
 
-	an(0) <= '0';
+	an(3) <= w_sel(0);
+	an(2) <= w_sel(1);
 	an(1) <= '1';
-	an(2) <= '1';
-	an(3) <= '1';
+	an(0) <= '1';
 	
 end top_basys3_arch;
